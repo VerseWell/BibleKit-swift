@@ -1,0 +1,14 @@
+--trimwhitespace always
+--comments ignore
+--commas always
+--wrapelements beforefirst
+--elseposition sameline
+--patternlet inline
+--indent 4
+--ifdef noindent
+--wrapcollections beforefirst
+--wraparguments beforefirst
+--extensionacl on-declarations
+--stripunusedargs closure-only
+--disable andOperator,unusedArguments,sortedImports,redundantSelf,wrapMultilineStatementBraces
+--exclude Pods,Carthage,Generated

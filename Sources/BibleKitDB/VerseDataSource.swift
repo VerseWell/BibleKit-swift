@@ -1,0 +1,191 @@
+import Foundation
+import GRDB
+
+/// A data source implementation of VerseRepository that uses GRDB for database access.
+/// This class handles the persistence and retrieval of Bible verses using SQLite through GRDB.
+final class VerseDataSource: VerseRepository {
+    /// Database model representing a Bible verse with its metadata and content.
+    /// Conforms to necessary GRDB protocols for database operations.
+    struct Verse: Codable, FetchableRecord, PersistableRecord {
+        var id: Int
+        var number: String
+        var text: String
+        var searchText: String
+
+        /// Database column definitions for type-safe queries
+        enum Columns {
+            static let id = Column(CodingKeys.id)
+            static let number = Column(CodingKeys.number)
+            static let text = Column(CodingKeys.text)
+            static let searchText = Column(CodingKeys.searchText)
+        }
+    }
+
+    /// The database writer instance used for all database operations
+    private let databaseWriter: DatabaseWriter
+
+    /// Creates a new instance of VerseDataSource with a custom database writer
+    /// - Parameter databaseWriter: The DatabaseWriter instance to use for database access
+    init(databaseWriter: DatabaseWriter) {
+        self.databaseWriter = databaseWriter
+    }
+
+    /// Creates a new instance of VerseDataSource for a specific Bible database
+    /// - Parameter url: The file URL pointing to the SQLite database file
+    convenience init(url: URL) {
+        self.init(databaseWriter: try! DatabaseQueue(path: url.path))
+    }
+
+    /// Creates a new instance of VerseDataSource with an in-memory database
+    /// Useful for testing or temporary storage scenarios
+    /// - Parameter dbQueue: Optional custom DatabaseQueue, defaults to new in-memory queue
+    /// - Returns: A configured VerseDataSource instance with initialized schema
+    /// - Throws: Database errors if schema creation fails
+    static func create(dbQueue: DatabaseQueue = try! DatabaseQueue()) async throws -> VerseDataSource {
+        try await dbQueue.write { db in
+            try db.create(table: "Verse") { t in
+                t.column("id", .integer).primaryKey()
+                t.column("number", .text).unique().indexed().notNull()
+                t.column("text", .text).notNull()
+                t.column("searchText", .text).indexed().notNull()
+            }
+
+            try db.create(virtualTable: "VerseFts", using: FTS4()) { t in
+                t.tokenizer = .porter
+                t.content = "Verse"
+                t.column("searchText")
+                t.synchronize(withTable: "Verse")
+            }
+        }
+
+        return VerseDataSource(databaseWriter: dbQueue)
+    }
+
+    /// Retrieves verses containing the specified text
+    /// - Parameters:
+    ///   - text: The text to search for in verses
+    ///   - limit: Maximum number of results to return
+    ///   - offset: Number of results to skip for pagination
+    /// - Returns: Array of matching VerseEntity objects
+    /// - Throws: Database errors if the query fails
+    func searchVerses(text: String, limit: Int, offset: Int) async throws -> [VerseEntity] {
+        try await databaseWriter.read { db in
+            let request: SQLRequest<Verse> = "SELECT Verse.id, Verse.number, Verse.text, Verse.searchText FROM Verse JOIN VerseFts ON VerseFts.docid == Verse.id AND VerseFts.searchText == Verse.searchText WHERE VerseFts.searchText MATCH \(text) ORDER BY Verse.id LIMIT \(limit) OFFSET \(offset)"
+            let records = try request.fetchAll(db)
+            return records
+                .map { VerseEntity(id: $0.number, text: $0.text) }
+        }
+    }
+
+    /// Retrieves verses with specific IDs that contain the search text
+    /// - Parameters:
+    ///   - text: The text to search for in verses
+    ///   - verseIDs: Array of specific verse IDs to search within.
+    ///   - limit: Maximum number of results to return
+    ///   - offset: Number of results to skip for pagination
+    /// - Returns: Array of matching VerseEntity objects
+    /// - Throws: Database errors if the query fails
+    func searchVersesByIds(
+        text: String,
+        verseIDs: [String],
+        limit: Int,
+        offset: Int
+    ) async throws -> [VerseEntity] {
+        let verseIDKeys = verseIDs.map { VerseEntity.sortKey(id: $0) }
+        return try await databaseWriter.read { db in
+            let request: SQLRequest<Verse> = "SELECT Verse.id, Verse.number, Verse.text, Verse.searchText FROM Verse JOIN VerseFts ON VerseFts.docid == Verse.id AND VerseFts.searchText == Verse.searchText WHERE Verse.id IN \(verseIDKeys) AND VerseFts.searchText MATCH \(text) ORDER BY Verse.id LIMIT \(limit) OFFSET \(offset)"
+            let records = try request.fetchAll(db)
+            return records.map {
+                VerseEntity(id: $0.number, text: $0.text)
+            }
+        }
+    }
+
+    /// Retrieves verses with specific IDs
+    /// - Parameters:
+    ///   - verseIDs: Array of specific verse IDs to fetch.
+    ///   - limit: Maximum number of results to return
+    ///   - offset: Number of results to skip for pagination
+    /// - Returns: Array of matching VerseEntity objects
+    /// - Throws: Database errors if the query fails
+    func getVersesByIds(
+        verseIDs: [String],
+        limit: Int,
+        offset: Int
+    ) async throws -> [VerseEntity] {
+        let verseIDKeys = verseIDs.map { VerseEntity.sortKey(id: $0) }
+        return try await databaseWriter.read { db in
+            let request: SQLRequest<Verse> = "SELECT Verse.id, Verse.number, Verse.text, Verse.searchText FROM Verse WHERE Verse.id IN \(verseIDKeys) ORDER BY Verse.id LIMIT \(limit) OFFSET \(offset)"
+            let records = try request.fetchAll(db)
+            return records.map {
+                VerseEntity(id: $0.number, text: $0.text)
+            }
+        }
+    }
+
+    /// Searches for verses containing the specified text within a verse range
+    /// - Parameters:
+    ///   - text: The text to search for within verses
+    ///   - startVerse: The starting verse ID (inclusive)
+    ///   - endVerse: The ending verse ID (inclusive)
+    ///   - limit: Maximum number of results to return
+    ///   - offset: Number of results to skip for pagination
+    /// - Returns: Array of matching VerseEntity objects within the range
+    /// - Throws: Database errors if the query fails
+    func searchVersesInRange(
+        text: String,
+        startVerse: String,
+        endVerse: String,
+        limit: Int,
+        offset: Int
+    ) async throws -> [VerseEntity] {
+        let start = VerseEntity(id: startVerse, text: "").key
+        let end = VerseEntity(id: endVerse, text: "").key
+
+        return try await databaseWriter.read { db in
+            let request: SQLRequest<Verse> = "SELECT Verse.id, Verse.number, Verse.text, Verse.searchText FROM Verse JOIN VerseFts ON VerseFts.docid == Verse.id AND VerseFts.searchText == Verse.searchText WHERE Verse.id BETWEEN \(start) AND \(end) AND VerseFts.searchText MATCH \(text) ORDER BY Verse.id LIMIT \(limit) OFFSET \(offset)"
+            let records = try request.fetchAll(db)
+            return records.map {
+                VerseEntity(id: $0.number, text: $0.text)
+            }
+        }
+    }
+
+    /// Retrieves verses within a specified range
+    /// - Parameters:
+    ///   - startVerse: The starting verse ID (inclusive)
+    ///   - endVerse: The ending verse ID (inclusive)
+    ///   - limit: Maximum number of results to return
+    ///   - offset: Number of results to skip for pagination
+    /// - Returns: Array of VerseEntity objects within the range
+    /// - Throws: Database errors if the query fails
+    func getVersesInRange(
+        startVerse: String,
+        endVerse: String,
+        limit: Int,
+        offset: Int
+    ) async throws -> [VerseEntity] {
+        let start = VerseEntity(id: startVerse, text: "").key
+        let end = VerseEntity(id: endVerse, text: "").key
+
+        return try await databaseWriter.read { db in
+            let request: SQLRequest<Verse> = "SELECT Verse.id, Verse.number, Verse.text, Verse.searchText FROM Verse WHERE Verse.id BETWEEN \(start) AND \(end) ORDER BY Verse.id LIMIT \(limit) OFFSET \(offset)"
+            let records = try request.fetchAll(db)
+            return records.map {
+                VerseEntity(id: $0.number, text: $0.text)
+            }
+        }
+    }
+
+    /// Inserts multiple verses into the database
+    /// - Parameter verses: Array of VerseEntity objects to insert
+    /// - Throws: Database errors if the insertion fails
+    func insertVerses(_ verses: [VerseEntity]) async throws {
+        try await databaseWriter.write { db in
+            let bibleVerses = verses.map { verse in
+                Verse(id: verse.key, number: verse.id, text: verse.text, searchText: verse.text)
+            }
+            try bibleVerses.forEach { try $0.insert(db) }
+        }
+    }
+}
