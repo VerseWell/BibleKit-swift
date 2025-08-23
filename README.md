@@ -26,7 +26,7 @@ BibleKit is a Swift package that provides Bible-related functionality for iOS an
 Add BibleKit to your project using [Swift Package Manager](https://swift.org/package-manager/):
 
 ```swift
-.package(url: "https://github.com/VerseWell/BibleKit-swift.git", from: "0.1.0")
+.package(url: "https://github.com/VerseWell/BibleKit-swift.git", from: "0.1.1")
 ```
 
 Then add `BibleKit` as a dependency in your target:

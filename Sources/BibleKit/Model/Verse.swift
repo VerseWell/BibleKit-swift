@@ -3,7 +3,7 @@ import Foundation
 
 /// Represents a single verse in the Bible with its unique identifier and text content.
 /// This class provides functionality for verse manipulation, range selection, and text formatting.
-public struct Verse: Equatable, Sendable {
+public struct Verse: Equatable, Hashable, Sendable {
     /// The unique identifier for this verse in the format "book:chapter:verse"
     public let id: VerseID
     /// The actual text content of the verse
