@@ -26,3 +26,16 @@ jobs:
 
       - name: Run tests with coverage
         run: swift test --enable-code-coverage
+
+      - name: Generate code coverage
+        run: |
+          xcrun llvm-cov export \
+            .build/debug/BibleKitPackageTests.xctest/Contents/MacOS/BibleKitPackageTests \
+            --format=lcov \
+            --instr-profile .build/debug/codecov/default.profdata \
+            > coverage.lcov
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage.lcov
