@@ -7,6 +7,16 @@ public struct ChapterReference: Equatable, Sendable {
     /// The chapter number within the book
     let index: Int
 
+    /// Creates a new ChapterReference.
+    ///
+    /// - Parameters:
+    ///   - bookName: The name of the book
+    ///   - index: The chapter number within the book
+    public init(bookName: BookName, index: Int) {
+        self.bookName = bookName
+        self.index = index
+    }
+
     /// The first verse ID of the chapter.
     var startVerseID: VerseID {
         verseID(verse: 1)

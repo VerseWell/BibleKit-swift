@@ -7,6 +7,16 @@ public struct VerseReference: Equatable, Comparable, Sendable {
     /// The verse number within the chapter
     let index: Int
 
+    /// Creates a new VerseReference.
+    ///
+    /// - Parameters:
+    ///   - chapter: The chapter reference
+    ///   - index: The verse number within the chapter
+    public init(chapter: ChapterReference, index: Int) {
+        self.chapter = chapter
+        self.index = index
+    }
+
     /// Creates a VerseID object from this verse reference.
     ///
     /// - Returns: The corresponding VerseID.
