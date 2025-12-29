@@ -8,7 +8,7 @@ import Foundation
 /// - Parameter endChapter: The chapter number where the selection ends
 /// - Parameter startVerse: The verse number where the selection starts
 /// - Parameter endVerse: The verse number where the selection ends
-public struct SelectedVerseRange {
+public struct SelectedVerseRange: Sendable {
     /// The book number where the selection starts
     private let startBook: Int
     /// The book number where the selection ends

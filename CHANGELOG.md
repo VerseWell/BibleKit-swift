@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2025-12-29
+
+### Changed
+- Core types now conform to `Sendable` protocol for improved concurrency support
+
 ## [0.1.1] - 2025-08-23
 
 ### Added
