@@ -14,23 +14,23 @@ import Foundation
 /// - Book name and abbreviation
 /// - Total number of chapters
 /// - Number of verses in each chapter
-public final class BookCollection {
+public final class BookCollection: Sendable {
     private init() {}
 
-    public nonisolated(unsafe) static let shared = BookCollection()
+    public static let shared = BookCollection()
 
     /// A complete list of all 66 books in the Bible, combining both testaments.
     /// Books are ordered according to their traditional canonical sequence.
-    public nonisolated(unsafe) static let allBooks: [Book] = oldTestamentBooks + newTestamentBooks
+    public static let allBooks: [Book] = oldTestamentBooks + newTestamentBooks
 
     /// A lookup map that provides quick access to Book objects using their BookName.
     /// This is useful for efficiently retrieving book information when you have the book name.
-    public nonisolated(unsafe) static let mapping: [BookName: Book] = Dictionary(uniqueKeysWithValues: allBooks.map { ($0.bookName, $0) })
+    public static let mapping: [BookName: Book] = Dictionary(uniqueKeysWithValues: allBooks.map { ($0.bookName, $0) })
 
     /// The 39 books of the Old Testament in their traditional order.
     /// Each Book object contains the complete structure of that book,
     /// including the number of verses in each chapter.
-    public nonisolated(unsafe) static let oldTestamentBooks: [Book] = [
+    public static let oldTestamentBooks: [Book] = [
         Book(
             bookName: .Genesis,
             totalChapters: 50,
@@ -471,7 +471,7 @@ public final class BookCollection {
     /// The 27 books of the New Testament in their traditional order.
     /// Each Book object contains the complete structure of that book,
     /// including the number of verses in each chapter.
-    public nonisolated(unsafe) static let newTestamentBooks: [Book] = [
+    public static let newTestamentBooks: [Book] = [
         Book(
             bookName: .Matthew,
             totalChapters: 28,
