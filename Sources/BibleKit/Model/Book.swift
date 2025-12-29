@@ -1,7 +1,7 @@
 import Foundation
 
 /// Represents a book in the Bible, containing information about its chapters and verses.
-public struct Book {
+public struct Book: Sendable {
     /// The name of the book
     public let bookName: BookName
     /// The total number of chapters in the book

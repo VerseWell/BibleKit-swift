@@ -3,7 +3,7 @@ import GRDB
 
 /// A data source implementation of VerseRepository that uses GRDB for database access.
 /// This class handles the persistence and retrieval of Bible verses using SQLite through GRDB.
-final class VerseDataSource: VerseRepository {
+final class VerseDataSource: VerseRepository, Sendable {
     /// Database model representing a Bible verse with its metadata and content.
     /// Conforms to necessary GRDB protocols for database operations.
     struct Verse: Codable, FetchableRecord, PersistableRecord {
