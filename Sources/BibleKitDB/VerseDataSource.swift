@@ -50,8 +50,8 @@ final class VerseDataSource: VerseRepository, Sendable {
                 t.column("searchText", .text).indexed().notNull()
             }
 
-            try db.create(virtualTable: "VerseFts", using: FTS4()) { t in
-                t.tokenizer = .porter
+            try db.create(virtualTable: "VerseFts", using: FTS5()) { t in
+                t.tokenizer = .porter(wrapping: .unicode61())
                 t.content = "Verse"
                 t.column("searchText")
                 t.synchronize(withTable: "Verse")
@@ -62,6 +62,8 @@ final class VerseDataSource: VerseRepository, Sendable {
     }
 
     /// Retrieves verses containing the specified text
+    /// Results are prioritized: exact phrase matches first (ordered by verse id),
+    /// then word matches (ordered by relevance)
     /// - Parameters:
     ///   - text: The text to search for in verses
     ///   - limit: Maximum number of results to return
@@ -70,7 +72,48 @@ final class VerseDataSource: VerseRepository, Sendable {
     /// - Throws: Database errors if the query fails
     func searchVerses(text: String, limit: Int, offset: Int) async throws -> [VerseEntity] {
         try await databaseWriter.read { db in
-            let request: SQLRequest<Verse> = "SELECT Verse.id, Verse.number, Verse.text, Verse.searchText FROM Verse JOIN VerseFts ON VerseFts.docid == Verse.id AND VerseFts.searchText == Verse.searchText WHERE VerseFts.searchText MATCH \(text) ORDER BY Verse.id LIMIT \(limit) OFFSET \(offset)"
+            let phraseSearchTerm = "\"\(text)\""
+            let request: SQLRequest<Verse> = """
+            SELECT id, number, text, searchText FROM (
+                -- First: Exact phrase matches (ordered by verse order)
+                SELECT
+                    Verse.id,
+                    Verse.number,
+                    Verse.text,
+                    Verse.searchText,
+                    0 AS priority
+                FROM Verse
+                JOIN (
+                    SELECT rowid
+                    FROM VerseFts
+                    WHERE searchText MATCH \(phraseSearchTerm)
+                ) AS exact_matches ON Verse.id = exact_matches.rowid
+
+                UNION
+
+                -- Second: All words present but not as exact phrase
+                SELECT
+                    Verse.id,
+                    Verse.number,
+                    Verse.text,
+                    Verse.searchText,
+                    1 AS priority
+                FROM Verse
+                JOIN (
+                    SELECT rowid
+                    FROM VerseFts
+                    WHERE searchText MATCH \(text)
+                ) AS word_matches ON Verse.id = word_matches.rowid
+                WHERE Verse.id NOT IN (
+                    SELECT Verse.id
+                    FROM Verse
+                    JOIN VerseFts ON Verse.id = VerseFts.rowid
+                    WHERE VerseFts.searchText MATCH \(phraseSearchTerm)
+                )
+            )
+            ORDER BY priority, id
+            LIMIT \(limit) OFFSET \(offset)
+            """
             let records = try request.fetchAll(db)
             return records
                 .map { VerseEntity(id: $0.number, text: $0.text) }
@@ -78,6 +121,8 @@ final class VerseDataSource: VerseRepository, Sendable {
     }
 
     /// Retrieves verses with specific IDs that contain the search text
+    /// Results are prioritized: exact phrase matches first (ordered by verse id),
+    /// then word matches (ordered by relevance)
     /// - Parameters:
     ///   - text: The text to search for in verses
     ///   - verseIDs: Array of specific verse IDs to search within.
@@ -93,7 +138,50 @@ final class VerseDataSource: VerseRepository, Sendable {
     ) async throws -> [VerseEntity] {
         let verseIDKeys = verseIDs.map { VerseEntity.sortKey(id: $0) }
         return try await databaseWriter.read { db in
-            let request: SQLRequest<Verse> = "SELECT Verse.id, Verse.number, Verse.text, Verse.searchText FROM Verse JOIN VerseFts ON VerseFts.docid == Verse.id AND VerseFts.searchText == Verse.searchText WHERE Verse.id IN \(verseIDKeys) AND VerseFts.searchText MATCH \(text) ORDER BY Verse.id LIMIT \(limit) OFFSET \(offset)"
+            let phraseSearchTerm = "\"\(text)\""
+            let request: SQLRequest<Verse> = """
+            SELECT id, number, text, searchText FROM (
+                -- First: Exact phrase matches (ordered by verse order)
+                SELECT
+                    Verse.id,
+                    Verse.number,
+                    Verse.text,
+                    Verse.searchText,
+                    0 AS priority
+                FROM Verse
+                JOIN (
+                    SELECT rowid
+                    FROM VerseFts
+                    WHERE searchText MATCH \(phraseSearchTerm)
+                ) AS exact_matches ON Verse.id = exact_matches.rowid
+                WHERE Verse.id IN \(verseIDKeys)
+
+                UNION
+
+                -- Second: All words present but not as exact phrase
+                SELECT
+                    Verse.id,
+                    Verse.number,
+                    Verse.text,
+                    Verse.searchText,
+                    1 AS priority
+                FROM Verse
+                JOIN (
+                    SELECT rowid
+                    FROM VerseFts
+                    WHERE searchText MATCH \(text)
+                ) AS word_matches ON Verse.id = word_matches.rowid
+                WHERE Verse.id IN \(verseIDKeys)
+                AND Verse.id NOT IN (
+                    SELECT Verse.id
+                    FROM Verse
+                    JOIN VerseFts ON Verse.id = VerseFts.rowid
+                    WHERE VerseFts.searchText MATCH \(phraseSearchTerm)
+                )
+            )
+            ORDER BY priority, id
+            LIMIT \(limit) OFFSET \(offset)
+            """
             let records = try request.fetchAll(db)
             return records.map {
                 VerseEntity(id: $0.number, text: $0.text)
@@ -124,6 +212,8 @@ final class VerseDataSource: VerseRepository, Sendable {
     }
 
     /// Searches for verses containing the specified text within a verse range
+    /// Results are prioritized: exact phrase matches first (ordered by verse id),
+    /// then word matches (ordered by relevance)
     /// - Parameters:
     ///   - text: The text to search for within verses
     ///   - startVerse: The starting verse ID (inclusive)
@@ -143,7 +233,50 @@ final class VerseDataSource: VerseRepository, Sendable {
         let end = VerseEntity(id: endVerse, text: "").key
 
         return try await databaseWriter.read { db in
-            let request: SQLRequest<Verse> = "SELECT Verse.id, Verse.number, Verse.text, Verse.searchText FROM Verse JOIN VerseFts ON VerseFts.docid == Verse.id AND VerseFts.searchText == Verse.searchText WHERE Verse.id BETWEEN \(start) AND \(end) AND VerseFts.searchText MATCH \(text) ORDER BY Verse.id LIMIT \(limit) OFFSET \(offset)"
+            let phraseSearchTerm = "\"\(text)\""
+            let request: SQLRequest<Verse> = """
+            SELECT id, number, text, searchText FROM (
+                -- First: Exact phrase matches (ordered by verse order)
+                SELECT
+                    Verse.id,
+                    Verse.number,
+                    Verse.text,
+                    Verse.searchText,
+                    0 AS priority
+                FROM Verse
+                JOIN (
+                    SELECT rowid
+                    FROM VerseFts
+                    WHERE searchText MATCH \(phraseSearchTerm)
+                ) AS exact_matches ON Verse.id = exact_matches.rowid
+                WHERE Verse.id BETWEEN \(start) AND \(end)
+
+                UNION
+
+                -- Second: All words present but not as exact phrase
+                SELECT
+                    Verse.id,
+                    Verse.number,
+                    Verse.text,
+                    Verse.searchText,
+                    1 AS priority
+                FROM Verse
+                JOIN (
+                    SELECT rowid
+                    FROM VerseFts
+                    WHERE searchText MATCH \(text)
+                ) AS word_matches ON Verse.id = word_matches.rowid
+                WHERE Verse.id BETWEEN \(start) AND \(end)
+                AND Verse.id NOT IN (
+                    SELECT Verse.id
+                    FROM Verse
+                    JOIN VerseFts ON Verse.id = VerseFts.rowid
+                    WHERE VerseFts.searchText MATCH \(phraseSearchTerm)
+                )
+            )
+            ORDER BY priority, id
+            LIMIT \(limit) OFFSET \(offset)
+            """
             let records = try request.fetchAll(db)
             return records.map {
                 VerseEntity(id: $0.number, text: $0.text)

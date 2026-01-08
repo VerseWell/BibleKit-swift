@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-01-08
+
+### Changed
+- Upgrade to FTS5 with improved search ranking
+
 ## [0.1.2] - 2025-12-29
 
 ### Changed
